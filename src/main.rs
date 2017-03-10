@@ -60,7 +60,14 @@ fn main() {
                         }
                     }
                 };
-                analyze_packet(p, &filter);
+                let out = analyze_packet(p, &filter, 0);
+                if write_to_file {
+                    output.write(out.as_bytes()).expect("Failed to write to file");
+                    output.write("\n".as_bytes()).expect("Failed to write to file");
+                    output.flush().expect("Unable to flush output file");
+                } else {
+                    println!("{}", out);
+                }
             }
         },
         None => {
@@ -98,7 +105,7 @@ fn main() {
                 Err(err) => panic!("Error opening device: {}", err)
             };
             loop {
-                let out = analyze_packet(cap.next().unwrap(), &filter);
+                let out = analyze_packet(cap.next().unwrap(), &filter, 0);
                 if write_to_file {
                     output.write(out.as_bytes()).expect("Failed to write to file");
                     output.write("\n".as_bytes()).expect("Failed to write to file");
@@ -112,7 +119,7 @@ fn main() {
 }
 
 // Analyze a given ethernet header
-fn analyze_packet(packet: pcap::Packet, filter: &Vec<analysis::filters::Filter>) -> String {
+fn analyze_packet(packet: pcap::Packet, filter: &Vec<analysis::filters::Filter>, offset: usize) -> String {
     // A packet can't be under 64 bytes by standard, but sometimes they are 
     // (PPPoE Discovery, for example)
     // if packet.header.caplen < 64 { return; }
@@ -124,26 +131,26 @@ fn analyze_packet(packet: pcap::Packet, filter: &Vec<analysis::filters::Filter>)
     }
 
     // Extract the src/dst MAC
-    let dst_mac = analysis::ether::MACAddr::from_u8(&packet.data[0..6]);
-    let src_mac = analysis::ether::MACAddr::from_u8(&packet.data[6..12]);
-    let ethernet_type: u16 = ((packet.data[12] as u16) << 8) + packet.data[13] as u16;
+    let dst_mac = analysis::ether::MACAddr::from_u8(&packet.data[(offset + 0)..(offset + 6)]);
+    let src_mac = analysis::ether::MACAddr::from_u8(&packet.data[(offset + 6)..(offset + 12)]);
+    let ethernet_type: u16 = ((packet.data[(offset + 12)] as u16) << 8) + packet.data[(offset + 13)] as u16;
     // TODO: Allow for Q-in-Q, etc, but for now...
-    let offset = 14;
+    let next_offset = offset + 14;
     let output = match ethernet_type {
         // IPoE traffic
-        0x0800 => handle_ipv4(packet, offset),
-        0x86DD => handle_ipv6(packet, offset),
-        0x0806 => handle_arp(packet, offset),
+        0x0800 => handle_ipv4(packet, next_offset),
+        0x86DD => handle_ipv6(packet, next_offset),
+        0x0806 => handle_arp(packet, next_offset),
 
         // MPLS
-        0x8847 => handle_mpls(packet, offset), // MPLS Packet
+        0x8847 => handle_mpls(packet, next_offset), // MPLS Packet
 
         // PPPoE
-        0x8863 => handle_pad(packet, offset), // PPPoE Discovery
-        0x8864 => handle_pas(packet, offset), // PPPoE Session
+        0x8863 => handle_pad(packet, next_offset), // PPPoE Discovery
+        0x8864 => handle_pas(packet, next_offset), // PPPoE Session
 
         // L2 OAM
-        0x88CC => handle_lldp(packet, offset),
+        0x88CC => handle_lldp(packet, next_offset),
         _ => {format!("{:#x}", ethernet_type)}
     };
     return format!("Ethernet: {} -> {} {{\n{}\n}}", src_mac, dst_mac, indent(output, 1));
@@ -162,17 +169,24 @@ fn handle_mpls(packet: pcap::Packet, offset: usize) -> String {
     let exp = packet.data[offset + 2] as u32 >> 5;
     let bottom_of_stack = packet.data[offset + 2] as u32 & 0x1 == 1;
     let ttl = packet.data[offset + 3];
-    // Checking what protocol the next packet is can be difficult... We assume IPv4 or IPv6 here,
-    // and ignore EoMPLS just like Cisco and Brocade did. >.<
-    // See this NANOG message: https://lists.gt.net/nanog/users/192741
-    let output = match packet.data[offset + 4] >> 4 {
-        0x4 => handle_ipv4(packet, offset + 4),
-        0x6 => handle_ipv6(packet, offset + 4),
-        _ => format!("Unknown MPLS sub-header: {}", packet.data[offset + 4])
-    };
-    format!("MPLS (Label: {}, Exp: {}, TTL: {}) {{\n{}\n}}", label, exp, ttl, 
-            if bottom_of_stack { indent(output, 1) } else { indent(format!("Stacked MPLS not yet implemented."), 1) }
-    )
+    let output;
+    if bottom_of_stack {
+        // Checking what protocol the next packet is can be difficult... We assume IPv4 or IPv6 here,
+        // and ignore EoMPLS with MAC Addr 04: or 06: just like Cisco and Brocade did. >.<
+        // See this NANOG message: https://lists.gt.net/nanog/users/192741
+        output = indent(match packet.data[offset + 4] >> 4 {
+            0x4 => handle_ipv4(packet, offset + 4),
+            0x6 => handle_ipv6(packet, offset + 4),
+            _ => {
+                // Have to have a default filter list
+                let fil = Vec::<analysis::filters::Filter>::new();
+                analyze_packet(packet, &fil, offset + 8) // PseudoWire Ethernet Control Word
+            },
+        }, 1);
+    } else {
+        output = indent(handle_mpls(packet, offset + 4), 1); 
+    }
+    format!("MPLS (Label: {}, Exp: {}, TTL: {}) {{\n{}\n}}", label, exp, ttl, output)
 }
 
 fn handle_ipv4(packet: pcap::Packet, offset: usize) -> String {
