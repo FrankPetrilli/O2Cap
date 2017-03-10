@@ -2,8 +2,16 @@
 name = "capture"
 version = "0.1.0"
 dependencies = [
+ "analysis 0.1.0",
  "pcap 0.5.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "users 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "analysis"
+version = "0.1.0"
+dependencies = [
+ "pcap 0.5.7 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

@@ -6,3 +6,6 @@ authors = ["Frank Petrilli <frank@petril.li>"]
 [dependencies]
 pcap = { version = "*" }
 users = "*"
+
+[dependencies.analysis]
+path = "src/analysis"
