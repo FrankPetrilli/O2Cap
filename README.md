@@ -1,5 +1,7 @@
 O2Cap - Rust packet capture and analysis
 
+Built for EWU CSCD 433/533 - Advanced Networks
+
 Usage
 =====
 
