@@ -1,5 +1,6 @@
 use std::fmt;
 
+
 pub struct IPv4Addr {
 	value: u32
 }
@@ -44,14 +45,21 @@ impl fmt::Display for IPv4Addr {
 impl IPv4Addr {
 	pub fn new(input: &str) -> IPv4Addr {
 		let mut split = input.split(".");
-		let val = (split.nth(0).unwrap().parse::<u32>().unwrap() << 24) +
-			(split.nth(0).unwrap().parse::<u32>().unwrap() << 16) +
-			(split.nth(0).unwrap().parse::<u32>().unwrap() << 8) +
+		let val = (split.nth(0).unwrap().parse::<u32>().unwrap() << 24) |
+			(split.nth(0).unwrap().parse::<u32>().unwrap() << 16) |
+			(split.nth(0).unwrap().parse::<u32>().unwrap() << 8) |
 			(split.nth(0).unwrap().parse::<u32>().unwrap() << 0);
 		return IPv4Addr { value: val };
 	}
     pub fn from_u32(input: u32) -> IPv4Addr {
         IPv4Addr { value: input }
+    }
+    pub fn from_u8(input: &[u8]) -> IPv4Addr {
+        let val = (input[0] as u32) << 24 |
+             (input[1] as u32) << 16 |
+             (input[2] as u32) << 8 |
+             (input[3] as u32) << 0;
+        IPv4Addr { value: val }
     }
 	pub fn get_network(&self, mask: &IPv4Mask) -> IPv4Addr {
 		IPv4Addr { value: self.value & mask.value }

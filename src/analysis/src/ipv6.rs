@@ -1,5 +1,6 @@
 use std::fmt;
 
+
 pub struct IPv6Addr {
 	value: u128
 }
@@ -76,6 +77,16 @@ impl IPv6Addr {
 	}
     pub fn from_u128(input: u128) -> IPv6Addr {
         IPv6Addr { value: input }
+    }
+    pub fn from_u8(input: &[u8]) -> IPv6Addr {
+        let init: u128 = 0;
+        let mut byte_index = 0;
+        let val = input.iter().fold(init, |mut res, byte| { 
+            res += (*byte as u128) << ((15 - byte_index) * 8);
+            byte_index += 1;
+            res
+        });
+        IPv6Addr::from_u128(val)
     }
 	pub fn get_network(&self, mask: &IPv6Mask) -> IPv6Addr {
 		IPv6Addr { value: self.value & mask.value }
