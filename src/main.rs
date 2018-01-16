@@ -386,14 +386,20 @@ fn handle_l4(packet: pcap::Packet, l4protocol: u8, offset: usize) -> String {
 fn handle_tcp(packet: pcap::Packet, offset: usize) -> String {
     let sport: u16 = ((packet.data[0x0 + offset as usize] as u16) << 8) + packet.data[0x1 + offset as usize] as u16;
     let dport: u16 = ((packet.data[0x2 + offset as usize] as u16) << 8) + packet.data[0x3 + offset as usize] as u16;
-    let flags: u16 = ((packet.data[20 + offset as usize] as u16) << 8) + packet.data[21 + offset as usize] as u16;
+    let flags: u16 = ((packet.data[12 + offset as usize] as u16) << 8) + packet.data[13 + offset as usize] as u16;
+    let ack = (flags & 0b000000010000) > 0;
+    let psh = (flags & 0b000000001000) > 0;
+    let rst = (flags & 0b000000000100) > 0;
     let syn = (flags & 0b000000000010) > 0;
-    let ack = (flags & 0b000000001000) > 0;
     let fin = (flags & 0b000000000001) > 0;
-    let mut flag_string = String::new();
-    if syn { flag_string.push_str(" SYN"); }
-    if ack { flag_string.push_str(" ACK"); }
-    if fin { flag_string.push_str(" FIN"); }
+    let mut flag_list = Vec::new();
+    //let mut flag_string = String::new();
+    if ack { flag_list.push("ACK"); }
+    if psh { flag_list.push("PSH"); }
+    if rst { flag_list.push("RST"); }
+    if syn { flag_list.push("SYN"); }
+    if fin { flag_list.push("FIN"); }
+    let flag_string = format!(" {}", flag_list.join(","));
 
     format!("TCP {} -> {} (Flags:{})", sport, dport, flag_string)
 }
